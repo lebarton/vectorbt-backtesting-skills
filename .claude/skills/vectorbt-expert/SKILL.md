@@ -9,7 +9,8 @@ user-invocable: false
 ## Environment
 
 - Python with vectorbt, pandas, numpy, plotly
-- Data sources: OpenAlgo (Indian markets), yfinance (US/Global), CCXT (Crypto), custom providers
+- Data sources: OpenAlgo (Indian markets), DuckDB (direct database), yfinance (US/Global), CCXT (Crypto), custom providers
+- DuckDB support: supports both custom DuckDB and OpenAlgo Historify format
 - API keys loaded from single root `.env` via `python-dotenv` + `find_dotenv()` — never hardcode keys
 - Technical indicators: **TA-Lib** (ALWAYS - never use VectorBT built-in indicators)
 - Specialty indicators: `openalgo.ta` for Supertrend, Donchian, Ichimoku, HMA, KAMA, ALMA, ZLEMA, VWMA
@@ -25,7 +26,7 @@ user-invocable: false
 
 1. **ALWAYS use TA-Lib** for ALL technical indicators (EMA, SMA, RSI, MACD, BBANDS, ATR, ADX, STDDEV, MOM). NEVER use `vbt.MA.run()`, `vbt.RSI.run()`, or any VectorBT built-in indicator.
 2. **Use OpenAlgo ta** for indicators NOT in TA-Lib: Supertrend, Donchian, Ichimoku, HMA, KAMA, ALMA, ZLEMA, VWMA.
-3. **Use OpenAlgo ta** for signal utilities: `ta.exrem()`, `ta.crossover()`, `ta.crossunder()`, `ta.flip()`.
+3. **Use OpenAlgo ta** for signal utilities: `ta.exrem()`, `ta.crossover()`, `ta.crossunder()`, `ta.flip()`. If `openalgo.ta` is not importable (standalone DuckDB), use inline `exrem()` fallback. See [duckdb-data](rules/duckdb-data.md).
 4. **Always clean signals** with `ta.exrem()` after generating raw buy/sell signals. Always `.fillna(False)` before exrem.
 5. **Market-specific fees**: India ([indian-market-costs](rules/indian-market-costs.md)), US ([us-market-costs](rules/us-market-costs.md)), Crypto ([crypto-market-costs](rules/crypto-market-costs.md)). Auto-select based on user's market.
 6. **Default benchmarks**: India=NIFTY via OpenAlgo, US=S&P 500 (`^GSPC`), Crypto=Bitcoin (`BTC-USD`). See [data-fetching](rules/data-fetching.md) Market Selection Guide.
@@ -33,6 +34,7 @@ user-invocable: false
 8. **Always explain** the backtest report in plain language so even normal traders understand risk and strength.
 9. **Plotly candlestick charts** must use `xaxis type="category"` to avoid weekend gaps.
 10. **Whole shares**: Always set `min_size=1, size_granularity=1` for equities.
+11. **DuckDB data loading**: When user provides a DuckDB path, load data directly using `duckdb.connect()` with `read_only=True`. Auto-detect format: OpenAlgo Historify (table `market_data`, epoch timestamps) vs custom (table `ohlcv`, date+time columns). See [duckdb-data](rules/duckdb-data.md).
 
 ## Modular Rule Files
 
@@ -54,6 +56,7 @@ Detailed reference for each topic is in `rules/`:
 | [crypto-market-costs](rules/crypto-market-costs.md) | Crypto fee model (spot, USDT-M, COIN-M futures) |
 | [futures-backtesting](rules/futures-backtesting.md) | Lot sizes (SEBI revised Dec 2025), value sizing |
 | [long-short-trading](rules/long-short-trading.md) | Simultaneous long/short, direction comparison |
+| [duckdb-data](rules/duckdb-data.md) | DuckDB direct loading, Historify format, auto-detect, resampling, multi-symbol |
 | [csv-data-resampling](rules/csv-data-resampling.md) | Loading CSV, resampling with Indian market alignment |
 | [walk-forward](rules/walk-forward.md) | Walk-forward analysis, WFE ratio |
 | [robustness-testing](rules/robustness-testing.md) | Monte Carlo, noise test, parameter sensitivity, delay test |
@@ -199,4 +202,61 @@ fig.show()
 
 # --- Export ---
 pf.positions.records_readable.to_csv(script_dir / f"{SYMBOL}_trades.csv", index=False)
+```
+
+## Quick Template: DuckDB Backtest Script
+
+```python
+import datetime as dt
+from pathlib import Path
+
+import duckdb
+import numpy as np
+import pandas as pd
+import talib as tl
+import vectorbt as vbt
+
+try:
+    from openalgo import ta
+    exrem = ta.exrem
+except ImportError:
+    def exrem(signal1, signal2):
+        result = signal1.copy()
+        active = False
+        for i in range(len(signal1)):
+            if active:
+                result.iloc[i] = False
+            if signal1.iloc[i] and not active:
+                active = True
+            if signal2.iloc[i]:
+                active = False
+        return result
+
+# --- Config ---
+SYMBOL = "SBIN"
+DB_PATH = r"path/to/market_data.duckdb"
+INIT_CASH = 1_000_000
+FEES = 0.000225              # Intraday equity
+FIXED_FEES = 20
+
+# --- Load from DuckDB ---
+con = duckdb.connect(DB_PATH, read_only=True)
+df = con.execute("""
+    SELECT date, time, open, high, low, close, volume
+    FROM ohlcv WHERE symbol = ? ORDER BY date, time
+""", [SYMBOL]).fetchdf()
+con.close()
+
+df["datetime"] = pd.to_datetime(df["date"].astype(str) + " " + df["time"].astype(str))
+df = df.set_index("datetime").sort_index()
+df = df.drop(columns=["date", "time"])
+
+# --- Resample to 5min ---
+df_5m = df.resample("5min", origin="start_day", offset="9h15min",
+                     label="right", closed="right").agg({
+    "open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"
+}).dropna()
+close = df_5m["close"]
+
+# --- Strategy + Backtest (same as OpenAlgo template) ---
 ```

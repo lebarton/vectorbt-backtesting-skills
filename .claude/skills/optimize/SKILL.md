@@ -25,6 +25,8 @@ If no arguments, ask the user which strategy to optimize.
 3. Create a `.py` file in `backtesting/{strategy_name}/` named `{symbol}_{strategy}_optimize.py`
 4. The script must:
    - Load `.env` from project root using `find_dotenv()` and fetch data via OpenAlgo `client.history()`
+   - If user provides a DuckDB path, load data directly via `duckdb.connect(path, read_only=True)`. See vectorbt-expert `rules/duckdb-data.md`.
+   - If `openalgo.ta` is not importable (standalone DuckDB), use inline `exrem()` fallback.
    - **Use TA-Lib for ALL indicators** (never VectorBT built-in)
    - **Use OpenAlgo ta** for specialty indicators (Supertrend, Donchian, etc.)
    - Use `ta.exrem()` to clean signals (always `.fillna(False)` before exrem)

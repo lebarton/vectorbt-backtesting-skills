@@ -27,6 +27,8 @@ If no arguments, ask the user which strategy they want.
 5. The script must:
    - Load `.env` from the project root using `find_dotenv()` (walks up from script dir automatically)
    - Fetch data via `client.history()` from OpenAlgo
+   - If user provides a DuckDB path, load data directly via `duckdb.connect(path, read_only=True)` instead of OpenAlgo API. Auto-detect format: Historify (`market_data` table, epoch timestamps) vs custom (`ohlcv` table, date+time). See vectorbt-expert `rules/duckdb-data.md`.
+   - If `openalgo.ta` is not importable (standalone DuckDB), use inline `exrem()` fallback.
    - **Use TA-Lib for ALL indicators** (EMA, SMA, RSI, MACD, BBands, ATR, ADX, STDDEV, MOM)
    - **Use OpenAlgo ta** for specialty indicators (Supertrend, Donchian, Ichimoku, HMA, KAMA, ALMA)
    - Use `ta.exrem()` to clean duplicate signals (always `.fillna(False)` before exrem)

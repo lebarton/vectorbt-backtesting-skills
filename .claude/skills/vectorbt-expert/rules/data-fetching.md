@@ -367,6 +367,55 @@ close_prices = pd.DataFrame({sym: dfs[sym]["close"] for sym in symbols})
 | NSE, BSE, NIFTY, BANKNIFTY, Indian stock names | India | OpenAlgo | [indian-market-costs](./indian-market-costs.md) |
 | AAPL, SPY, S&P 500, NASDAQ, US stock names | US | yfinance | [us-market-costs](./us-market-costs.md) |
 | BTC, ETH, crypto, USDT | Crypto | yfinance or CCXT | [crypto-market-costs](./crypto-market-costs.md) |
+| DuckDB path provided | India | DuckDB direct | [indian-market-costs](./indian-market-costs.md) |
+
+## 3b. DuckDB Direct Loading (Fastest — No API)
+
+For backtesting with local DuckDB databases. No API key or network needed. Supports two formats:
+
+### Custom DuckDB
+
+```python
+import duckdb
+import pandas as pd
+
+DB_PATH = r"path/to/market_data.duckdb"
+con = duckdb.connect(DB_PATH, read_only=True)
+df = con.execute("""
+    SELECT date, time, open, high, low, close, volume
+    FROM ohlcv WHERE symbol = 'SBIN' ORDER BY date, time
+""").fetchdf()
+con.close()
+
+df["datetime"] = pd.to_datetime(df["date"].astype(str) + " " + df["time"].astype(str))
+df = df.set_index("datetime").sort_index()
+df = df.drop(columns=["date", "time"])
+close = df["close"]
+```
+
+### OpenAlgo Historify DuckDB
+
+```python
+import duckdb
+import pandas as pd
+
+HISTORIFY_DB = r"path/to/openalgo/db/historify.duckdb"
+con = duckdb.connect(HISTORIFY_DB, read_only=True)
+df = con.execute("""
+    SELECT timestamp, open, high, low, close, volume
+    FROM market_data
+    WHERE symbol = 'SBIN' AND exchange = 'NSE' AND interval = '1m'
+    ORDER BY timestamp
+""").fetchdf()
+con.close()
+
+df["datetime"] = pd.to_datetime(df["timestamp"], unit="s")
+df = df.set_index("datetime").sort_index()
+df = df.drop(columns=["timestamp"])
+close = df["close"]
+```
+
+See [duckdb-data](./duckdb-data.md) for full reference including auto-detection, resampling, and multi-symbol loading.
 
 ---
 

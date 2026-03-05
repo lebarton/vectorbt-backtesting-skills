@@ -24,6 +24,8 @@ If "long-vs-short" is one of the strategies, compare longonly vs shortonly vs bo
 3. Create a `.py` file in `backtesting/strategy_comparison/` named `{symbol}_strategy_comparison.py`
 3. The script must:
    - Fetch data once via OpenAlgo
+   - If user provides a DuckDB path, load data directly via `duckdb.connect(path, read_only=True)`. See vectorbt-expert `rules/duckdb-data.md`.
+   - If `openalgo.ta` is not importable (standalone DuckDB), use inline `exrem()` fallback.
    - **Use TA-Lib for ALL indicators** (never VectorBT built-in)
    - **Use OpenAlgo ta** for specialty indicators (Supertrend, Donchian, etc.)
    - Clean signals with `ta.exrem()` (always `.fillna(False)` before exrem)

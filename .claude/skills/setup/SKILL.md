@@ -101,7 +101,7 @@ pip install TA_Lib-0.4.32-cp312-cp312-win_amd64.whl
 Install all required packages (latest versions):
 
 ```bash
-pip install openalgo vectorbt plotly anywidget nbformat ta-lib pandas numpy yfinance python-dotenv tqdm scipy numba nbformat ipywidgets quantstats ccxt
+pip install openalgo vectorbt plotly anywidget nbformat ta-lib pandas numpy yfinance python-dotenv tqdm scipy numba nbformat ipywidgets quantstats ccxt duckdb psutil
 ```
 
 ### Step 5: Create Backtesting Folder
@@ -120,6 +120,7 @@ Do NOT pre-create strategy subfolders.
 
 **6b. Ask the user which markets they will be backtesting** using AskUserQuestion:
 - Indian Markets (OpenAlgo) — requires OpenAlgo API key
+- Indian Markets (DuckDB) — direct database loading, no API needed
 - US Markets (yfinance) — no API key needed
 - Crypto Markets (CCXT) — optional API key for private data
 
@@ -128,24 +129,35 @@ Do NOT pre-create strategy subfolders.
 - If the user provides a key, store it in `.env`
 - If the user skips, write a placeholder
 
-**6d. If the user selected Crypto Markets**, ask if they want to configure exchange API keys:
+**6d. If the user selected Indian Markets (DuckDB)**, ask for the DuckDB database path:
+- Ask: "Enter the path to your DuckDB database file (e.g., D:/data/market_data.duckdb):"
+- Auto-detect format: If the database has a `market_data` table with `symbol, exchange, interval, timestamp` columns, it is OpenAlgo Historify format (store as `HISTORIFY_DB_PATH`). Otherwise store as `DUCKDB_PATH`.
+- If the user also has OpenAlgo Historify, ask: "Is this an OpenAlgo Historify database? (y/n)"
+
+**6e. If the user selected Crypto Markets**, ask if they want to configure exchange API keys:
 - Ask: "Do you have exchange API keys for authenticated data? (Optional — public OHLCV data works without keys)"
 - If yes, ask for API key and secret key, store in `.env`
 - If no, leave them blank in `.env`
 
-**6e. Write the `.env` file** in the project root directory. Use this template, filling in any keys the user provided:
+**6f. Write the `.env` file** in the project root directory. Use this template, filling in any keys/paths the user provided:
 
 ```
 # Indian Markets (OpenAlgo)
 OPENALGO_API_KEY={user_provided_key or "your_openalgo_api_key_here"}
 OPENALGO_HOST=http://127.0.0.1:5000
 
+# DuckDB Data Sources (direct database loading - fastest)
+# Custom DuckDB (user-created with OHLCV table)
+DUCKDB_PATH={user_provided_path or ""}
+# OpenAlgo Historify DuckDB (market_data table with epoch timestamps)
+HISTORIFY_DB_PATH={user_provided_path or ""}
+
 # Crypto Markets (CCXT) - Optional
 CRYPTO_API_KEY={user_provided_key or ""}
 CRYPTO_SECRET_KEY={user_provided_key or ""}
 ```
 
-**6f. Add `.env` to `.gitignore`** if it exists (never commit secrets):
+**6g. Add `.env` to `.gitignore`** if it exists (never commit secrets):
 
 Scripts use `find_dotenv()` to automatically walk up and find the single root `.env`, so no copies are needed in subdirectories.
 
@@ -163,6 +175,7 @@ import vectorbt as vbt
 import openalgo
 import plotly
 import talib
+import duckdb
 import anywidget
 import nbformat
 import quantstats as qs
@@ -170,6 +183,7 @@ from dotenv import load_dotenv
 print('All packages installed successfully')
 print(f'  vectorbt: {vbt.__version__}')
 print(f'  plotly: {plotly.__version__}')
+print(f'  duckdb: {duckdb.__version__}')
 print(f'  nbformat: {nbformat.__version__}')
 print(f'  quantstats: {qs.__version__}')
 print(f'  TA-Lib: available')
